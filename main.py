@@ -30,43 +30,12 @@ def get_connected_ip(proc):
         print(f"Connection access error: {e}")
     return None, None
 
-def get_server_from_cmdline(proc):
-    """Extract server IP and port from dreamseeker.exe command line."""
-    try:
-        cmdline = proc.cmdline()
-        if not cmdline:
-            return None, None
-
-        # Look for argument starting with 'byond://' or containing '://'
-        for arg in cmdline:
-            if arg.startswith("byond://"):
-                addr_str = arg[8:]  # Remove 'byond://'
-            elif "://" in arg:
-                proto, addr_str = arg.split("://", 1)
-            else:
-                continue
-
-            # Strip any query params or trailing slashes
-            addr_str = addr_str.split("/")[0].split("?")[0].split("|")[0]
-            host, port_str = addr_str.split(":", 1) if ":" in addr_str else (None, None)
-
-            if host and port_str and port_str.isdigit():
-                return host.strip(), int(port_str)
-
-    except (psutil.AccessDenied, psutil.NoSuchProcess):
-        pass
-    except Exception as e:
-        print(f"Error parsing command line: {e}")
-
-    return None, None
-
 def get_documents_folder():
     """Get the user's Documents folder using Windows API."""
     CSIDL_PERSONAL = 5  # CSIDL for My Documents
     buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
     ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, 0, buf)
     return buf.value
-
 
 def get_pager_recent_server():
     """Read recent-url and recent-name from BYOND's pager.txt."""
@@ -138,34 +107,33 @@ def main():
                 time.sleep(5)
                 continue
 
-            # ip, port = get_connected_ip(proc)
-            ip, port = get_server_from_cmdline(proc)
-
-            if not ip:
-                time.sleep(5)
-                continue
-
-            if (ip, port) != last_ip_port:
-                print(f"Connected to {ip}:{port}")
-                server_info = server_lookup.get_server_info(ip, port)
-                print(f"Detected server: {server_info['name']}")
-                last_ip_port = (ip, port)
-
             # Get server from pager.txt as fallback/confirmation
             (pager_addr, pager_port), pager_name = get_pager_recent_server()
 
-            if pager_addr and pager_addr != (ip, port):
+            pager_addr, pager_port = pager_addr, pager_port
+
+            if not pager_addr:
+                time.sleep(5)
+                continue
+
+            if (pager_addr, pager_port) != last_ip_port:
+                print(f"Connected to {pager_addr}:{pager_port}")
+                server_info = server_lookup.get_server_info(pager_addr, pager_port)
+                print(f"Detected server: {server_info['name']}")
+                last_ip_port = (pager_addr, pager_port)
+
+            if pager_addr and pager_addr != (pager_addr, pager_port):
                 # Use pager's custom name if it's for this server
                 print(f"Using pager-saved name: {pager_name}")
                 server_info = {
                     "name": pager_name,
                     "icon": server_info.get("icon", "ss13_default")  # Keep detected icon
                 }
-            elif pager_addr and pager_addr != (ip, port):
-                print(f"Warning: Dreamseeker connected to {ip}:{port}, but pager shows {pager_addr}")
+            elif pager_addr and pager_addr != (pager_addr, pager_port):
+                print(f"Warning: Dreamseeker connected to {pager_addr}:{pager_port}, but pager shows {pager_addr}")
 
             # Query BYOND status
-            status_data = byond.query_byond_server(ip, port)
+            status_data = byond.query_byond_server(pager_addr, pager_port)
             activity = build_activity(server_info, status_data)
             rpc.update(**activity)
 
