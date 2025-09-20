@@ -1,0 +1,68 @@
+name: Build EXE and Release
+
+on:
+  push:
+    branches:
+      - main  # Change if using 'master' or another branch
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller psutil pypiwin32 python-dotenv pypresence
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --onefile ^
+            --name "ss13-rpc" ^
+            --add-data "config.json;." ^
+            --add-data "discord_rpc.py;." ^
+            main.py
+        shell: cmd
+
+      - name: Rename EXE to include commit SHA
+        run: |
+          $commit = git rev-parse --short HEAD
+          $newName = "ss13-rpc-$commit.exe"
+          Move-Item "dist/ss13-rpc.exe" "dist/$newName"
+          echo "BUILT_EXE=$newName" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Clean Old Assets
+              run: |
+                $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/auto-latest" -Headers @{ Authorization = "Bearer $env:PAT" }
+                $assets = $releases.assets
+                foreach ($asset in $assets) {
+                  $delUrl = "https://api.github.com/repos/${{ github.repository }}/releases/assets/$($asset.id)"
+                  Invoke-RestMethod -Method Delete -Uri $delUrl -Headers @{ Authorization = "Bearer $env:PAT" }
+                  echo "Deleted asset: $($asset.name)"
+                }
+              env:
+                PAT: ${{ secrets.PAT }}
+              shell: pwsh
+
+      - name: Upload Release Asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.PAT }}
+          file: dist/${{ env.BUILT_EXE }}
+          asset_name: ${{ env.BUILT_EXE }}
+          tag: auto-latest
+          overwrite: true
+          body: |
+            Auto-built EXE from commit:
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+            - Built at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
