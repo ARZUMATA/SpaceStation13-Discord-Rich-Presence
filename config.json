@@ -5,7 +5,8 @@
     "92.63.189.15:7888": {
       "name": "BlueMoon",
       "icon": "ss13_bluemoon",
-      "template": "{players}"
+      "template": "Players: {players}"
+
     },
     "92.63.189.6:7721": {
       "name": "1984 Main",

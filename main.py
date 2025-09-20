@@ -11,7 +11,7 @@ import logging
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[
         logging.FileHandler("rpc.log", encoding="utf-8"),
@@ -101,7 +101,10 @@ def build_activity(server_info, status_data):
     logger.debug(f"Raw status data: {status_data}")
 
     # Determine template
-    template = server_info.get("template") or DEFAULT_TEMPLATE
+    template = server_info.get("template")
+    if template is None:
+        template = DEFAULT_TEMPLATE
+
     logger.info(f"Using template: '{template}'")
 
     try:
@@ -127,11 +130,6 @@ def build_activity(server_info, status_data):
         state = "Unknown Status"
 
     activity["state"] = state
-
-    # Show player count in party bar
-    players = status_data.get("players", "Unknown")
-    activity["party_size"] = [int(players)] if players.isdigit() else [0]
-    activity["party_size"].append(0)  # We never know player cap
 
     return activity
 
@@ -161,7 +159,7 @@ def main():
 
             current_server_key = (pager_addr, pager_port)
 
-            if (pager_addr, pager_port) != last_ip_port:
+            if current_server_key != last_ip_port:
                 print(f"Connected to {pager_addr}:{pager_port}")
 
                 # Look up server override by (host, port)
@@ -180,6 +178,8 @@ def main():
             # Query BYOND status
             status_data = byond.query_byond_server(pager_addr, pager_port)
             activity = build_activity(server_info, status_data)
+
+            logger.debug(f"Final activity payload: {activity}")
             rpc.update(**activity)
 
             time.sleep(UPDATE_INTERVAL)
