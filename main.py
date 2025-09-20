@@ -133,6 +133,9 @@ def build_activity(server_info, status_data):
 def main():
     rpc = DiscordRPC(CLIENT_ID)
     last_ip_port = None
+    last_pid = None
+    last_pager_name = None
+    start_time = None  # Persisted start time
     first_run = True  # Skip sleep on first iteration
 
     print("SS13 Discord RPC started. Waiting for dreamseeker.exe...")
@@ -145,10 +148,12 @@ def main():
                     print("Dreamseeker closed. Clearing presence...")
                     rpc.clear()
                     last_ip_port = None
+                    start_time = None
                 time.sleep(5)
                 continue
 
             # Get server from pager.txt as fallback/confirmation
+            current_pid = proc.info['pid']
             ip, port = get_connected_ip(proc)
             title = get_window_title(proc)
             title_name = None
@@ -159,32 +164,47 @@ def main():
             pager_addr = ip
             pager_port = port
             pager_name = title_name
-            
+
             if not pager_addr:
                 time.sleep(5)
                 continue
 
             current_server_key = (pager_addr, pager_port)
 
-            if current_server_key != last_ip_port:
+            # Detect if we've switched servers or restarted dreamseeker
+            server_changed = (
+                current_server_key != last_ip_port or
+                pager_name != last_pager_name or
+                current_pid != last_pid
+            )
+
+            if server_changed:
                 print(f"Connected to {pager_addr}:{pager_port}")
 
                 # Look up server override by (host, port)
                 server_info = server_lookup.get_server_info(pager_addr, pager_port)
-
-                # Override name only if pager provides a custom name
                 if pager_name:
                     print(f"Using pager-saved name: {pager_name}")
                     # Preserve template, icon, etc. — only change name
                     server_info = server_info.copy()  # Don't modify cached version
                     server_info["name"] = pager_name
-                
+
                 print(f"Detected server: {server_info['name']}")
+
+                # Reset start time only on change
+                start_time = int(time.time())
+
                 last_ip_port = current_server_key
+                last_pager_name = pager_name
+                last_pid = current_pid
 
             # Query BYOND status
             status_data = byond.query_byond_server(pager_addr, pager_port)
             activity = build_activity(server_info, status_data)
+
+            # Inject start time
+            if start_time:
+                activity["start"] = start_time
 
             logger.debug(f"Final activity payload: {activity}")
             rpc.update(**activity)
