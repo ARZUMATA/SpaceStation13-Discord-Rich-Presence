@@ -1,0 +1,54 @@
+name: Build EXE and Release
+
+on:
+  push:
+    branches:
+      - main  # Change if using 'master' or another branch
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller psutil pypiwin32 python-dotenv pypresence
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --onefile ^
+            --name "ss13-rpc" ^
+            --add-data "config.json;." ^
+            --add-data "discord_rpc.py;." ^
+            main.py
+        shell: cmd
+
+      - name: Rename EXE to fixed name
+        run: |
+          $newName = "ss13-rpc-latest.exe"
+          Copy-Item "dist/ss13-rpc.exe" "dist/$newName"
+          echo "BUILT_EXE=$newName" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Upload Release Asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.PAT }}
+          file: dist/${{ env.BUILT_EXE }}
+          asset_name: ${{ env.BUILT_EXE }}
+          tag: auto-latest
+          overwrite: true
+          body: |
+            Auto-built EXE from commit:
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+            - Built at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
