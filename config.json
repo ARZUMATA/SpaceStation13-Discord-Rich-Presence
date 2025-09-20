@@ -7,12 +7,16 @@
       "name": "BlueMoon",
       "icon": "ss13_bluemoon",
       "template": "Players: {players}"
-
     },
     "92.63.189.6:7721": {
       "name": "1984 Main",
       "icon": "ss13_1984",
-      "template": "Round: {mode}, Station Time: {stationtime}, Players {players}"
+      "template": "Map: {map_name}, Players: {players}, Duration: {roundtime}"
+    },
+    "94.130.237.220:42069": {
+      "name": "SPLURT 2.0",
+      "icon": "ss13_splurt",
+      "template": "Map: {map_name}, Status: {security_level}, Players: {players}, Duration: {round_duration}"
     }
   }
 }
