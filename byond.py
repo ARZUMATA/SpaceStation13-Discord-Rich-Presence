@@ -1,5 +1,6 @@
 import socket
 import struct
+import json
 import urllib.parse
 
 # http://www.byond.com/forum/post/2158640
@@ -75,10 +76,17 @@ def query_byond_server(ip: str, port: int, query: str = "?status") -> dict:
         if len(response) < 6:
             return {}
 
-        # Parse: skip header, extract null-terminated string
+        # Extract body: skip first 5 bytes, strip trailing null
         body = response[5:-1].decode('utf-8', errors='replace')
-        parsed = urllib.parse.parse_qs(body)
-        return {k: v[0] if isinstance(v, list) else v for k, v in parsed.items()}
+
+        # Try parsing as JSON first
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            # Fall back to legacy key=value parsing
+            parsed = urllib.parse.parse_qs(body)
+            return {k: v[0] if isinstance(v, list) else v for k, v in parsed.items()}
+
     except Exception as e:
         print(f"BYOND query failed: {e}")
         return {}
