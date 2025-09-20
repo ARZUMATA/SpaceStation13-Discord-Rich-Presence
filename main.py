@@ -42,47 +42,44 @@ def get_connected_ip(proc):
         print(f"Connection access error: {e}")
     return None, None
 
-def get_documents_folder():
-    """Get the user's Documents folder using Windows API."""
-    CSIDL_PERSONAL = 5  # CSIDL for My Documents
-    buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
-    ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, 0, buf)
-    return buf.value
-
-def get_pager_recent_server():
-    """Read recent-url and recent-name from BYOND's pager.txt."""
-    documents = get_documents_folder()
-    pager_path = os.path.join(documents, "BYOND", "cfg", "pager.txt")
-
-    if not os.path.exists(pager_path):
-        print(f"pager.txt not found: {pager_path}")
-        return None, None
-
-    recent_url = None
-    recent_name = None
-
+def get_window_title(proc):
+    """Get window title of the given process using Windows API. Works even if minimized."""
     try:
-        with open(pager_path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("recent-url "):
-                     recent_url = line.strip()[11:].split("|")[0]  # Strip "recent-url " and extra parts
-                elif line.startswith("recent-name "):
-                    recent_name = line.strip()[12:].split("|")[0]  # Strip "recent-name " and extra parts
+        pid = proc.info['pid']
+        user32 = ctypes.windll.user32
 
-        if recent_url and recent_name:
-            # Parse: recent_url is like "byond://host:port"
-            if recent_url.startswith("byond://"):
-                addr = recent_url[8:].split("|")[0]  # Strip protocol and extra parts
-                host_port = addr.split(":")
-                if len(host_port) == 2:
-                    host, port_str = host_port
-                    if port_str.isdigit():
-                        return (host.strip(), int(port_str)), recent_name.strip()
-                        
+        titles = []
+
+        def enum_windows_callback(hwnd, _):
+            # Skip completely invisible windows, but allow minimized ones
+            if not user32.IsWindowVisible(hwnd):
+                return True  # Keep enumerating
+
+            window_pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+            
+            if window_pid.value == pid:
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    titles.append(buff.value)
+            return True  # Continue enumeration
+
+        user32.EnumWindows(
+            ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(enum_windows_callback), 0
+        )
+
+        # Prefer non-empty Dream Seeker titles
+        for title in titles:
+            if title:
+                return title
+        return titles[0] if titles else None
+
     except Exception as e:
-        print(f"Error reading pager.txt: {e}")
-
-    return None, None
+        logger.debug(f"Could not get window title for PID {pid}: {e}")
+        return None
+    
 
 
 def build_activity(server_info, status_data):
@@ -136,6 +133,7 @@ def build_activity(server_info, status_data):
 def main():
     rpc = DiscordRPC(CLIENT_ID)
     last_ip_port = None
+    first_run = True  # Skip sleep on first iteration
 
     print("SS13 Discord RPC started. Waiting for dreamseeker.exe...")
 
@@ -151,8 +149,17 @@ def main():
                 continue
 
             # Get server from pager.txt as fallback/confirmation
-            (pager_addr, pager_port), pager_name = get_pager_recent_server()
+            ip, port = get_connected_ip(proc)
+            title = get_window_title(proc)
+            title_name = None
+            if title:
+                title_name = title
+                logger.debug(f"Extracted server name from window title: '{title_name}'")
 
+            pager_addr = ip
+            pager_port = port
+            pager_name = title_name
+            
             if not pager_addr:
                 time.sleep(5)
                 continue
@@ -182,7 +189,11 @@ def main():
             logger.debug(f"Final activity payload: {activity}")
             rpc.update(**activity)
 
-            time.sleep(UPDATE_INTERVAL)
+            # Immediate check without waiting on first run
+            if not first_run:
+                time.sleep(UPDATE_INTERVAL)  # Normal delay between checks (e.g. 15s)
+            else:
+                first_run = False  # Disable first-run skip after initial check
 
         except KeyboardInterrupt:
             print("\nShutting down...")
