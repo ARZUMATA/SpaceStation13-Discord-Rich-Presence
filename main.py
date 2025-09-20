@@ -3,7 +3,7 @@ import time
 import byond
 import server_lookup
 from discord_rpc import DiscordRPC
-from config import CLIENT_ID, UPDATE_INTERVAL
+from config import CLIENT_ID, UPDATE_INTERVAL, DEFAULT_TEMPLATE
 import os
 import ctypes
 from ctypes import wintypes
@@ -84,6 +84,28 @@ def build_activity(server_info, status_data):
         activity["state"] = "In Lobby"
         return activity
 
+    # Determine template
+    template = server_info.get("template") or DEFAULT_TEMPLATE
+
+    try:
+        # Convert all values to string (in case of int/bool)
+        safe_data = {k: str(v) if v is not None else "" for k, v in status_data.items()}
+        state = template.format(**safe_data)
+    except KeyError as e:
+        # If a key is missing in status_data, replace it with "?"
+        try:
+            class MissingKeyDict(dict):
+                def __missing__(self, key):
+                    return "?"
+            state = template.format_map(MissingKeyDict(safe_data))
+        except Exception:
+            state = template.replace("{", "?").replace("}", "?")  # Fallback
+    except Exception:
+        state = "Unknown Status"
+
+    activity["state"] = state
+
+    # Show player count in party bar
     players = status_data.get("players", "Unknown")
     activity["party_size"] = [int(players)] if players.isdigit() else [0]
     activity["party_size"].append(0)  # We never know player cap
@@ -110,27 +132,27 @@ def main():
             # Get server from pager.txt as fallback/confirmation
             (pager_addr, pager_port), pager_name = get_pager_recent_server()
 
-            pager_addr, pager_port = pager_addr, pager_port
-
             if not pager_addr:
                 time.sleep(5)
                 continue
 
+            current_server_key = (pager_addr, pager_port)
+
             if (pager_addr, pager_port) != last_ip_port:
                 print(f"Connected to {pager_addr}:{pager_port}")
-                server_info = server_lookup.get_server_info(pager_addr, pager_port)
-                print(f"Detected server: {server_info['name']}")
-                last_ip_port = (pager_addr, pager_port)
 
-            if pager_addr and pager_addr != (pager_addr, pager_port):
-                # Use pager's custom name if it's for this server
-                print(f"Using pager-saved name: {pager_name}")
-                server_info = {
-                    "name": pager_name,
-                    "icon": server_info.get("icon", "ss13_default")  # Keep detected icon
-                }
-            elif pager_addr and pager_addr != (pager_addr, pager_port):
-                print(f"Warning: Dreamseeker connected to {pager_addr}:{pager_port}, but pager shows {pager_addr}")
+                # Look up server override by (host, port)
+                server_info = server_lookup.get_server_info(pager_addr, pager_port)
+
+                # Override name only if pager provides a custom name
+                if pager_name:
+                    print(f"Using pager-saved name: {pager_name}")
+                    # Preserve template, icon, etc. — only change name
+                    server_info = server_info.copy()  # Don't modify cached version
+                    server_info["name"] = pager_name
+                
+                print(f"Detected server: {server_info['name']}")
+                last_ip_port = current_server_key
 
             # Query BYOND status
             status_data = byond.query_byond_server(pager_addr, pager_port)

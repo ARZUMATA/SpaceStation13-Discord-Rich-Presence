@@ -1,22 +1,16 @@
 {
-  "CLIENT_ID": "1418308341125353682",
   "UPDATE_INTERVAL": 15,
+  "DEFAULT_TEMPLATE": "Players {players}",
   "SERVER_OVERRIDES": {
     "92.63.189.15:7888": {
       "name": "BlueMoon",
-      "icon": "ss13_bluemoon"
+      "icon": "ss13_bluemoon",
+      "template": "{players}"
     },
-    "play.baystation12.net:8000": {
-      "name": "Baystation 12",
-      "icon": "bs12"
-    },
-    "game.yogstation.net:4133": {
-      "name": "Yogstation 13",
-      "icon": "yogstation"
-    },
-    "hippiestation.com:9999": {
-      "name": "Hippie Station",
-      "icon": "hippiestation"
+    "92.63.189.6:7721": {
+      "name": "1984 Main",
+      "icon": "ss13_1984",
+      "template": "Round: {mode}, Station Time: {stationtime}, Players {players}"
     }
   }
 }

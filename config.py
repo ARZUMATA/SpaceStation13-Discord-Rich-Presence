@@ -9,10 +9,17 @@ CONFIG_FILE = "config.json"
 # Default config if file doesn't exist
 DEFAULT_CONFIG = {
     "UPDATE_INTERVAL": 15,
+    "DEFAULT_TEMPLATE": "Players {players}",
     "SERVER_OVERRIDES": {
         "92.63.189.15:7888": {
             "name": "BlueMoon",
-            "icon": "ss13_bluemoon"
+            "icon": "ss13_bluemoon",
+            "template": "{players}"
+        },
+        "92.63.189.6:7721": {
+            "name": "1984 Main",
+            "icon": "ss13_1984",
+            "template": "Round: {mode}, Station Time: {stationtime}, Players {players}"
         }
     }
 }
@@ -45,3 +52,4 @@ if not CLIENT_ID:
     raise RuntimeError("CLIENT_ID must be set via environment variable or config.json")
 
 UPDATE_INTERVAL = config_data.get("UPDATE_INTERVAL", DEFAULT_CONFIG["UPDATE_INTERVAL"])
+DEFAULT_TEMPLATE = config_data.get("DEFAULT_TEMPLATE", DEFAULT_CONFIG["DEFAULT_TEMPLATE"])
