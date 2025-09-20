@@ -7,6 +7,18 @@ from config import CLIENT_ID, UPDATE_INTERVAL, DEFAULT_TEMPLATE
 import os
 import ctypes
 from ctypes import wintypes
+import logging
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.FileHandler("rpc.log", encoding="utf-8"),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+logger = logging.getLogger(__name__)
 
 def find_dreamseeker_process():
     """Finds the dreamseeker.exe process."""
@@ -81,26 +93,37 @@ def build_activity(server_info, status_data):
     }
 
     if not status_data:
+        logger.info("No status data received. Setting state to 'In Lobby'")
         activity["state"] = "In Lobby"
         return activity
 
+    # Log raw server response
+    logger.debug(f"Raw status data: {status_data}")
+
     # Determine template
     template = server_info.get("template") or DEFAULT_TEMPLATE
+    logger.info(f"Using template: '{template}'")
 
     try:
         # Convert all values to string (in case of int/bool)
         safe_data = {k: str(v) if v is not None else "" for k, v in status_data.items()}
         state = template.format(**safe_data)
+        logger.info(f"Formatted status: '{state}'")
     except KeyError as e:
         # If a key is missing in status_data, replace it with "?"
+        logger.warning(f"Template missing key {e}. Using fallback formatting")
         try:
             class MissingKeyDict(dict):
                 def __missing__(self, key):
+                    logger.debug(f"Template key '{key}' not found in response")
                     return "?"
             state = template.format_map(MissingKeyDict(safe_data))
-        except Exception:
-            state = template.replace("{", "?").replace("}", "?")  # Fallback
-    except Exception:
+            logger.info(f"Formatted status (with fallbacks): '{state}'")
+        except Exception as e_inner:
+            logger.error(f"Failed to format even with fallback: {e_inner}")
+            state = "Unknown Status"
+    except Exception as e:
+        logger.error(f"Unexpected error formatting template: {e}")
         state = "Unknown Status"
 
     activity["state"] = state
