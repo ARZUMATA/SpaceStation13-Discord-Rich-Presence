@@ -39,6 +39,13 @@ jobs:
           echo "BUILT_EXE=$newName" >> $env:GITHUB_ENV
         shell: pwsh
 
+      - name: Set current timestamp
+        id: timestamp
+        run: |
+          $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          echo "TIMESTAMP=$timestamp" >> $env:GITHUB_ENV
+        shell: pwsh
+
       - name: Upload Release Asset
         uses: svenstaro/upload-release-action@v2
         with:
@@ -51,4 +58,4 @@ jobs:
             Auto-built EXE from commit:
             - Commit: ${{ github.sha }}
             - Branch: ${{ github.ref_name }}
-            - Built at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+            - Built at: ${{ env.TIMESTAMP }}
